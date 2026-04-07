@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>弱网测试结果</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 12px 10px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+    th {
+      background-color: #f5f5f5;
+      font-weight: bold;
+    }
+    details summary {
+      cursor: pointer;
+      color: #1890ff;
+      user-select: none;
+    }
+    details[open] summary {
+      color: #0066cc;
+    }
+    .config-cell {
+      width: 320px;
+      word-break: break-word;
+    }
+    th.time, td.time {
+      white-space: normal;
+      line-height: 1.25;
+      width: 140px;
+      text-align: left;
+      word-break: keep-all; /* 仅按我们插入的 <br> 换行，避免被 - 分成多行 */
+    }
+    th.metric {
+      white-space: normal;
+      line-height: 1.25;
+      width: 92px;
+    }
+    td.metric {
+      text-align: right;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+      padding: 12px 10px;
+      width: 92px;
+    }
+    /* 不再用 first-child 统一设宽，改为按列类名控制 */
+    .highlight {
+      background-color: #fffbe6;
+    }
+    .session-id {
+      cursor: default;
+      white-space: nowrap;
+      display: inline-block;
+    }
+    .copy-btn {
+      margin-left: 6px;
+      border: 1px solid #bbb;
+      border-radius: 3px;
+      background: #fff;
+      color: #333;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    h2 {
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+
+<h2>弱网测试结果汇总</h2>
+<p style="margin: 0 0 12px 0; color: #666; font-size: 13px;">
+  口径说明：回环延迟为“基于总音频切分 + 首段锚点推导”的估算值；全流程丢包/抖动来自 inbound-rtp stats，弱网极端下可能缺失。
+</p>
+
+<div id="table-container"></div>
+
+<script>
+  const logs = [];
+
+  // 动态加载 report.json。默认地址可通过 ?report=<url> 覆盖；支持 ?refresh=<秒> 自动刷新
+  const DEFAULT_REPORT_URL = 'https://dashscope001w01.oss-cn-hangzhou.aliyuncs.com/report.json';
+
+  function getReportUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const u = params.get('report');
+    return u && u.trim() ? u.trim() : DEFAULT_REPORT_URL;
+  }
+
+  function getRefreshIntervalMs() {
+    const params = new URLSearchParams(window.location.search);
+    const sec = parseFloat(params.get('refresh'));
+    if (Number.isFinite(sec) && sec > 0) return Math.floor(sec * 1000);
+    return 0;
+  }
+
+  async function fetchLogs() {
+    const url = getReportUrl();
+    const resp = await fetch(`${url}?_=${Date.now()}`, { cache: 'no-store' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    // 兼容两种格式：
+    // - 旧格式：直接是数组
+    // - 新格式：对象，包含 logs 数组（要求以 { 开头）
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.logs)) return data.logs;
+    throw new Error('report.json 格式错误：期望为数组或包含 logs 数组的对象');
+  }
+
+  function formatConfig(log) {
+    const upLoss = log.uplink_packet_loss_percent;
+    const downLoss = log.downlink_packet_loss_percent;
+    const upDelay = log.uplink_delay_ms;
+    const downDelay = log.downlink_delay_ms;
+    const upJitter = log.uplink_jitter_ms;
+    const downJitter = log.downlink_jitter_ms;
+
+    const sameLoss = upLoss === downLoss;
+    const sameDelay = upDelay === downDelay;
+    const sameJitter = upJitter === downJitter;
+
+    const fmt = (val, unit = "") => (val == null ? "—" : `${val}${unit}`);
+
+    const lossLine = sameLoss
+      ? `上下行 ${fmt(upLoss, "%")} 丢包`
+      : `上行 ${fmt(upLoss, "%")} 丢包 / 下行 ${fmt(downLoss, "%")} 丢包`;
+    const delayLine = sameDelay
+      ? `上下行 ${fmt(upDelay, "ms")} 延迟`
+      : `上行 ${fmt(upDelay, "ms")} 延迟 / 下行 ${fmt(downDelay, "ms")} 延迟`;
+    const jitterLine = sameJitter
+      ? `上下行 ${fmt(upJitter, "ms")} 抖动`
+      : `上行 ${fmt(upJitter, "ms")} 抖动 / 下行 ${fmt(downJitter, "ms")} 抖动`;
+
+    return `${lossLine}<br>${delayLine}<br>${jitterLine}`;
+  }
+
+  function round(val, digits = 4) {
+    if (val == null) return '—';
+    return parseFloat(val.toFixed(digits));
+  }
+
+  function renderLink(url, text = "查看") {
+    if (!url) return '—';
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+  }
+
+  function formatTs(ts) {
+    if (ts == null || !Number.isFinite(ts)) return '—';
+    try {
+      const d = new Date(ts * 1000);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      return `${y}-${m}-${day} ${hh}:${mm}:${ss}`;
+    } catch {
+      return '—';
+    }
+  }
+
+  function formatTsTwoLines(ts) {
+    if (ts == null || !Number.isFinite(ts)) return '—';
+    try {
+      const d = new Date(ts * 1000);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      // 强制仅在日期与时间之间换行，保证最多两行
+      return `${y}-${m}-${day}<br>${hh}:${mm}:${ss}`;
+    } catch {
+      return '—';
+    }
+  }
+
+  function escapeHtml(text) {
+    if (text == null) return '';
+    return String(text)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function shortSessionId(id) {
+    if (!id) return '—';
+    const s = String(id);
+    return s.length <= 8 ? s : s.slice(0, 8);
+  }
+
+  function renderSessionCell(sessionId) {
+    if (!sessionId) return '—';
+    const full = escapeHtml(sessionId);
+    const short = escapeHtml(shortSessionId(sessionId));
+    return `
+      <span class="session-id">
+        ${short}
+        <button class="copy-btn" onclick="copySessionId('${full}')">复制</button>
+      </span>
+    `;
+  }
+
+  function copySessionId(sessionId) {
+    if (!sessionId) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(sessionId).catch(() => {
+        window.prompt('复制 Session ID：', sessionId);
+      });
+    } else {
+      window.prompt('复制 Session ID：', sessionId);
+    }
+  }
+
+  function renderRoundTable(rounds) {
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>Round</th>
+            <th>Duration (s)</th>
+            <th>Stutter Rate (%)</th>
+            <th>Noise Rate (%)</th>
+            <th>Downlink WER</th>
+            <th>RTT Latency (s)</th>
+            <th>Downlink Loss (%)</th>
+            <th>Downlink Jitter (ms)</th>
+            <th>子音频 OSS</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    rounds.forEach(r => {
+      const roundText = r.audio_oss_url ? `Round ${r.round}` : `${r.round}`;
+      const roundLink = r.audio_oss_url
+        ? `<a href="${r.audio_oss_url}" target="_blank" rel="noopener noreferrer">${roundText}</a>`
+        : roundText;
+      html += `
+        <tr>
+          <td>${roundLink}</td>
+          <td>${round(r.duration, 2)}</td>
+          <td>${round(r.stutter_rate * 100, 2)}</td>
+          <td>${round(r.noise_rate * 100, 2)}</td>
+          <td>${round(r.downlink_wer, 4)}</td>
+          <td>${round(r.round_trip_latency, 3)}</td>
+          <td>${r.downlink_packet_loss_rate != null ? round(r.downlink_packet_loss_rate * 100, 2) : '—'}</td>
+          <td>${round(r.downlink_jitter_ms, 2)}</td>
+          <td>${renderLink(r.audio_oss_url, "子音频")}</td>
+        </tr>
+      `;
+    });
+    html += `</tbody></table>`;
+    return html;
+  }
+
+  function generateHTML(logs) {
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th class="time">时间</th>
+            <th>弱网配置</th>
+            <th class="metric">信令耗时 (s)</th>
+            <th class="metric">ICE耗时 (s)</th>
+            <th class="metric">模型接通耗时 (s)</th>
+            <th class="metric">已处理/计划</th>
+            <th class="metric">平均回环延迟 (s)</th>
+            <th class="metric">平均音频卡顿率 (%)</th>
+            <th class="metric">平均音频噪音率 (%)</th>
+            <th class="metric">平均下行 WER</th>
+            <th class="metric">全流程下行丢包率 (%)</th>
+            <th class="metric">全流程下行抖动 (ms)</th>
+            <th class="metric">上行卡顿均值</th>
+            <th class="metric">上行NetEQ延时</th>
+            <th>ICE ufrag</th>
+            <th>总音频 OSS</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    logs.forEach(log => {
+      const config = formatConfig(log);
+      const startedAt = formatTsTwoLines(log.connection_start_ts);
+      const signaling = round(log.signaling_duration, 3);
+      const ice = round(log.ice_duration, 3);
+      const modelConnectionTime = round(log.model_connection_time, 3);
+      const progress = `${log.processed_rounds ?? '—'}/${log.planned_rounds ?? '—'}`;
+      const avgLatency = round(log.avg_round_trip_latency, 3);
+      const avgStutter = round(log.avg_stutter_rate * 100, 2);
+      const avgNoise = round(log.avg_noise_rate * 100, 2);
+      const avgWer = round(log.avg_downlink_wer, 4);
+      const overallDownLoss = log.overall_downlink_packet_loss_rate != null ? round(log.overall_downlink_packet_loss_rate * 100, 2) : '—';
+      const overallDownJitter = round(log.overall_downlink_jitter_ms, 2);
+      const totalAudioLink = renderLink(log.total_audio_oss_url, "总音频");
+      const uplinkStutterAvg = round(log.uplink_audio_stutter_avg, 3);
+      const uplinkNeteqDelayAvg = round(log.uplink_neteq_delay_avg, 3);
+
+      html += `
+        <tr>
+          <td class="time">${startedAt}</td>
+          <td class="config-cell">${config}</td>
+          <td class="metric">${signaling}</td>
+          <td class="metric">${ice}</td>
+          <td class="metric">${modelConnectionTime}</td>
+          <td class="metric">${progress}</td>
+          <td class="metric">${avgLatency}</td>
+          <td class="metric">${avgStutter}</td>
+          <td class="metric">${avgNoise}</td>
+          <td class="metric">${avgWer}</td>
+          <td class="metric">${overallDownLoss}</td>
+          <td class="metric">${overallDownJitter}</td>
+          <td class="metric">${uplinkStutterAvg}</td>
+          <td class="metric">${uplinkNeteqDelayAvg}</td>
+          <td>${renderSessionCell(log.ice_ufrag)}</td>
+          <td>${totalAudioLink}</td>
+        </tr>
+        <tr>
+          <td colspan="16">
+            <details>
+              <summary>▶ 展开 10 轮明细（ICE ufrag: ${log.ice_ufrag}）</summary>
+              <div style="margin-top: 10px;">
+                ${renderRoundTable(log.rounds)}
+              </div>
+            </details>
+          </td>
+        </tr>
+      `;
+    });
+
+    html += `</tbody></table>`;
+    document.getElementById('table-container').innerHTML = html;
+  }
+
+  // 页面加载时渲染
+  window.addEventListener('DOMContentLoaded', async () => {
+    const container = document.getElementById('table-container');
+    async function loadAndRender() {
+      try {
+        const remote = await fetchLogs();
+        generateHTML(remote);
+      } catch (e) {
+        const msg = escapeHtml(String(e && e.message ? e.message : e));
+        container.innerHTML = `<div style="color:#c00; margin-bottom: 10px;">加载报告失败：${msg}</div>`;
+        // 回退：如果内置示例存在则渲染内置，否则保留错误信息
+        if (Array.isArray(window.logs) && window.logs.length > 0) {
+          generateHTML(window.logs);
+        }
+      }
+    }
+    await loadAndRender();
+    const refreshMs = getRefreshIntervalMs();
+    if (refreshMs > 0) {
+      setInterval(loadAndRender, refreshMs);
+    }
+  });
+</script>
+
+</body>
+</html>
