@@ -26,6 +26,12 @@
       background-color: #f5f5f5;
       font-weight: bold;
     }
+    /* 固定表头 */
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2; /* 确保覆盖单元格内容 */
+    }
     details summary {
       cursor: pointer;
       color: #1890ff;
