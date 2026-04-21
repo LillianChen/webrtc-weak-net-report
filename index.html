@@ -134,12 +134,26 @@
     const downDelay = log.downlink_delay_ms;
     const upJitter = log.uplink_jitter_ms;
     const downJitter = log.downlink_jitter_ms;
+    const upBw = log.uplink_bandwidth_rate ?? log.bandwidth_rate;
+    const downBw = log.downlink_bandwidth_rate;
 
     const sameLoss = upLoss === downLoss;
     const sameDelay = upDelay === downDelay;
     const sameJitter = upJitter === downJitter;
+    const sameBw = upBw === downBw;
 
     const fmt = (val, unit = "") => (val == null ? "—" : `${val}${unit}`);
+    const fmtBw = (v) => {
+      if (v == null) return "不限速";
+      const s = String(v).trim();
+      if (!s) return "不限速";
+      const low = s.toLowerCase();
+      if (low === "0" || low === "0bit" || low === "0bps" || low === "0kbit" || low === "0kbps"
+          || low === "0mbit" || low === "0mbps" || low === "0gbit" || low === "0gbps") {
+        return "不限速";
+      }
+      return s;
+    };
 
     const lossLine = sameLoss
       ? `上下行 ${fmt(upLoss, "%")} 丢包`
@@ -150,8 +164,11 @@
     const jitterLine = sameJitter
       ? `上下行 ${fmt(upJitter, "ms")} 抖动`
       : `上行 ${fmt(upJitter, "ms")} 抖动 / 下行 ${fmt(downJitter, "ms")} 抖动`;
+    const bwLine = sameBw
+      ? `上下行 ${fmtBw(upBw)} 带宽`
+      : `上行 ${fmtBw(upBw)} 带宽 / 下行 ${fmtBw(downBw)} 带宽`;
 
-    return `${lossLine}<br>${delayLine}<br>${jitterLine}`;
+    return `${lossLine}<br>${delayLine}<br>${jitterLine}<br>${bwLine}`;
   }
 
   function round(val, digits = 4) {
@@ -294,6 +311,7 @@
             <th class="metric">平均下行 WER</th>
             <th class="metric">全流程下行丢包率 (%)</th>
             <th class="metric">全流程下行抖动 (ms)</th>
+            <th class="metric">全流程下行PLC (%)</th>
             <th class="metric">上行卡顿均值</th>
             <th class="metric">上行NetEQ延时</th>
             <th>ICE ufrag</th>
@@ -316,6 +334,7 @@
       const avgWer = round(log.avg_downlink_wer, 4);
       const overallDownLoss = log.overall_downlink_packet_loss_rate != null ? round(log.overall_downlink_packet_loss_rate * 100, 2) : '—';
       const overallDownJitter = round(log.overall_downlink_jitter_ms, 2);
+      const overallDownPlc = log.overall_downlink_plc_ratio != null ? round(log.overall_downlink_plc_ratio * 100, 2) : '—';
       const totalAudioLink = renderLink(log.total_audio_oss_url, "总音频");
       const uplinkStutterAvg = round(log.uplink_audio_stutter_avg, 3);
       const uplinkNeteqDelayAvg = round(log.uplink_neteq_delay_avg, 3);
@@ -334,13 +353,14 @@
           <td class="metric">${avgWer}</td>
           <td class="metric">${overallDownLoss}</td>
           <td class="metric">${overallDownJitter}</td>
+          <td class="metric">${overallDownPlc}</td>
           <td class="metric">${uplinkStutterAvg}</td>
           <td class="metric">${uplinkNeteqDelayAvg}</td>
           <td>${renderSessionCell(log.ice_ufrag)}</td>
           <td>${totalAudioLink}</td>
         </tr>
         <tr>
-          <td colspan="16">
+          <td colspan="17">
             <details>
               <summary>▶ 展开 10 轮明细（ICE ufrag: ${log.ice_ufrag}）</summary>
               <div style="margin-top: 10px;">
