@@ -168,7 +168,14 @@
       ? `上下行 ${fmtBw(upBw)} 带宽`
       : `上行 ${fmtBw(upBw)} 带宽 / 下行 ${fmtBw(downBw)} 带宽`;
 
-    return `${lossLine}<br>${delayLine}<br>${jitterLine}<br>${bwLine}`;
+    const ca = log.weak_net_cycle_active_seconds;
+    const cs = log.weak_net_cycle_sleep_seconds;
+    const cycleLine =
+      ca != null && cs != null && Number(ca) > 0 && Number(cs) > 0
+        ? `动态弱网: 持续 ${ca}s → 休眠 ${cs}s（循环）`
+        : "动态弱网: 关闭";
+
+    return `${lossLine}<br>${delayLine}<br>${jitterLine}<br>${bwLine}<br>${cycleLine}`;
   }
 
   function round(val, digits = 4) {
