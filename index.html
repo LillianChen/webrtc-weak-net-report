@@ -313,7 +313,7 @@
             <th class="metric">全流程下行抖动 (ms)</th>
             <th class="metric">全流程下行PLC (%)</th>
             <th class="metric">上行卡顿均值</th>
-            <th class="metric">上行NetEQ延时</th>
+            <th class="metric">上行PLC (%)</th>
             <th>ICE ufrag</th>
             <th>总音频 OSS</th>
           </tr>
@@ -337,7 +337,11 @@
       const overallDownPlc = log.overall_downlink_plc_ratio != null ? round(log.overall_downlink_plc_ratio * 100, 2) : '—';
       const totalAudioLink = renderLink(log.total_audio_oss_url, "总音频");
       const uplinkStutterAvg = round(log.uplink_audio_stutter_avg, 3);
-      const uplinkNeteqDelayAvg = round(log.uplink_neteq_delay_avg, 3);
+      // 口径：沿用 report.json 字段 uplink_neteq_delay_avg，但页面展示为“上行PLC(%)”，数值需 /100
+      const uplinkPlcPct =
+        log.uplink_neteq_delay_avg != null && Number.isFinite(log.uplink_neteq_delay_avg)
+          ? round(log.uplink_neteq_delay_avg / 100, 2)
+          : "—";
 
       html += `
         <tr>
@@ -355,7 +359,7 @@
           <td class="metric">${overallDownJitter}</td>
           <td class="metric">${overallDownPlc}</td>
           <td class="metric">${uplinkStutterAvg}</td>
-          <td class="metric">${uplinkNeteqDelayAvg}</td>
+          <td class="metric">${uplinkPlcPct}</td>
           <td>${renderSessionCell(log.ice_ufrag)}</td>
           <td>${totalAudioLink}</td>
         </tr>
