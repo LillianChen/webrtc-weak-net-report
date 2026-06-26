@@ -294,8 +294,8 @@
         <tr>
           <td>${roundLink}</td>
           <td>${round(r.duration, 2)}</td>
-          <td>${round(r.stutter_rate * 100, 2)}</td>
-          <td>${round(r.noise_rate * 100, 2)}</td>
+          <td>${round(r.stutter_rate != null ? r.stutter_rate * 100 : null, 2)}</td>
+          <td>${round(r.noise_rate != null ? r.noise_rate * 100 : null, 2)}</td>
           <td>${round(extractWer(r.uplink_wer), 4)}</td>
           <td>${round(r.downlink_wer, 4)}</td>
           <td>${round(r.round_trip_latency, 3)}</td>
@@ -345,8 +345,8 @@
       const modelConnectionTime = round(log.model_connection_time, 3);
       const progress = `${log.processed_rounds ?? '—'}/${log.planned_rounds ?? '—'}`;
       const avgLatency = round(log.avg_round_trip_latency, 3);
-      const avgStutter = round(log.avg_stutter_rate * 100, 2);
-      const avgNoise = round(log.avg_noise_rate * 100, 2);
+      const avgStutter = round(log.avg_stutter_rate != null ? log.avg_stutter_rate * 100 : null, 2);
+      const avgNoise = round(log.avg_noise_rate != null ? log.avg_noise_rate * 100 : null, 2);
       const avgUplinkWer = round(extractWer(log.avg_uplink_wer), 4);
       const avgWer = round(log.avg_downlink_wer, 4);
       const overallDownLoss = log.overall_downlink_packet_loss_rate != null ? round(log.overall_downlink_packet_loss_rate * 100, 2) : '—';
