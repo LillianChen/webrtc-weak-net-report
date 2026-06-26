@@ -183,6 +183,12 @@
     return parseFloat(val.toFixed(digits));
   }
 
+  function extractWer(val) {
+    if (val == null) return null;
+    if (typeof val === 'object' && val.wer != null) return val.wer;
+    return val;
+  }
+
   function renderLink(url, text = "查看") {
     if (!url) return '—';
     return `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>`;
@@ -269,6 +275,7 @@
             <th>Duration (s)</th>
             <th>Stutter Rate (%)</th>
             <th>Noise Rate (%)</th>
+            <th>Uplink WER</th>
             <th>Downlink WER</th>
             <th>RTT Latency (s)</th>
             <th>Downlink Loss (%)</th>
@@ -289,6 +296,7 @@
           <td>${round(r.duration, 2)}</td>
           <td>${round(r.stutter_rate * 100, 2)}</td>
           <td>${round(r.noise_rate * 100, 2)}</td>
+          <td>${round(extractWer(r.uplink_wer), 4)}</td>
           <td>${round(r.downlink_wer, 4)}</td>
           <td>${round(r.round_trip_latency, 3)}</td>
           <td>${r.downlink_packet_loss_rate != null ? round(r.downlink_packet_loss_rate * 100, 2) : '—'}</td>
@@ -315,6 +323,7 @@
             <th class="metric">平均回环延迟 (s)</th>
             <th class="metric">平均音频卡顿率 (%)</th>
             <th class="metric">平均音频噪音率 (%)</th>
+            <th class="metric">平均上行 WER</th>
             <th class="metric">平均下行 WER</th>
             <th class="metric">全流程下行丢包率 (%)</th>
             <th class="metric">全流程下行抖动 (ms)</th>
@@ -338,6 +347,7 @@
       const avgLatency = round(log.avg_round_trip_latency, 3);
       const avgStutter = round(log.avg_stutter_rate * 100, 2);
       const avgNoise = round(log.avg_noise_rate * 100, 2);
+      const avgUplinkWer = round(extractWer(log.avg_uplink_wer), 4);
       const avgWer = round(log.avg_downlink_wer, 4);
       const overallDownLoss = log.overall_downlink_packet_loss_rate != null ? round(log.overall_downlink_packet_loss_rate * 100, 2) : '—';
       const overallDownJitter = round(log.overall_downlink_jitter_ms, 2);
@@ -361,6 +371,7 @@
           <td class="metric">${avgLatency}</td>
           <td class="metric">${avgStutter}</td>
           <td class="metric">${avgNoise}</td>
+          <td class="metric">${avgUplinkWer}</td>
           <td class="metric">${avgWer}</td>
           <td class="metric">${overallDownLoss}</td>
           <td class="metric">${overallDownJitter}</td>
@@ -371,7 +382,7 @@
           <td>${totalAudioLink}</td>
         </tr>
         <tr>
-          <td colspan="17">
+          <td colspan="18">
             <details>
               <summary>▶ 展开 10 轮明细（ICE ufrag: ${log.ice_ufrag}）</summary>
               <div style="margin-top: 10px;">
